@@ -28,19 +28,21 @@
 //
 // *****************************************************************************
 
-#include <stdint.h>
-#include <stdio.h>
+#include <cstdint>
+#include <cstdio>
 #include <set>
 
-#include <rosgraph_msgs/Log.h>
-#include <ros/master.h>  // required for getURI, VCM 12 April 2017
-
+// #include <rosgraph_msgs/Log.h>
+// #include <ros/master.h>  // required for getURI, VCM 12 April 2017
+#include <rclcpp/rclcpp.hpp>
+#include <rcl_interfaces/msg/log.hpp>
 
 #include <swri_console/console_window.h>
 #include <swri_console/log_database.h>
 #include <swri_console/log_database_proxy_model.h>
 #include <swri_console/node_list_model.h>
 #include <swri_console/settings_keys.h>
+#include <swri_console/defines.h>
 
 #include <QColorDialog>
 #include <QRegExp>
@@ -58,12 +60,13 @@ using namespace Qt;
 namespace swri_console {
 
 ConsoleWindow::ConsoleWindow(LogDatabase *db)
-  :
-  QMainWindow(),
-  db_(db),
-  db_proxy_(new LogDatabaseProxyModel(db)),
-  node_list_model_(new NodeListModel(db)),
-  node_click_handler_(new NodeClickHandler())
+  : QMainWindow()
+  , searchFunction_(SEARCH)
+  , ui()
+  , db_(db)
+  , db_proxy_(new LogDatabaseProxyModel(db))
+  , node_list_model_(new NodeListModel(db))
+  , node_click_handler_(new NodeClickHandler())
 {
   ui.setupUi(this); 
 
@@ -96,6 +99,12 @@ ConsoleWindow::ConsoleWindow(LogDatabase *db)
 
   QObject::connect(ui.action_ShowTimestamps, SIGNAL(toggled(bool)),
                    db_proxy_, SLOT(setDisplayTime(bool)));
+
+  QObject::connect(ui.action_ShowLoggerName, SIGNAL(toggled(bool)),
+                   db_proxy_, SLOT(setDisplayLogger(bool)));
+
+  QObject::connect(ui.action_ShowFunctionName, SIGNAL(toggled(bool)),
+                   db_proxy_, SLOT(setDisplayFunction(bool)));
 
   QObject::connect(ui.action_RegularExpressions, SIGNAL(toggled(bool)),
                    db_proxy_, SLOT(setUseRegularExpressions(bool)));
@@ -223,7 +232,7 @@ void ConsoleWindow::saveLogs()
                                                   "Save Logs",
                                                   QDir::homePath() + QDir::separator() + defaultname,
                                                   tr("Bag Files (*.bag);;Text Files (*.txt)"));
-  if (filename != NULL && !filename.isEmpty()) {
+  if (filename != nullptr && !filename.isEmpty()) {
     db_proxy_->saveToFile(filename);
   }
 }
@@ -231,11 +240,9 @@ void ConsoleWindow::saveLogs()
 void ConsoleWindow::connected(bool connected)
 {
   if (connected) {
-    // When connected, display current URL along with status in the status bar, VCM 4/12/2017
-    QString currentUrl = QString::fromStdString(ros::master::getURI());
-    statusBar()->showMessage("Connected to ROS Master.  URL: "+currentUrl);
+    statusBar()->showMessage("Listening for logs.");
   } else {
-    statusBar()->showMessage("Disconnected from ROS Master.");
+    statusBar()->showMessage("ROS has shut down.");
   }
 }
 
@@ -251,8 +258,8 @@ void ConsoleWindow::nodeSelectionChanged()
   std::set<std::string> nodes;
   QStringList node_names;
 
-  for (int i = 0; i < selection.size(); i++) {
-    std::string name = node_list_model_->nodeName(selection[i]);
+  for (const auto & i : selection) {
+    std::string name = node_list_model_->nodeName(i);
     nodes.insert(name);
     node_names.append(name.c_str());
   }
@@ -271,19 +278,19 @@ void ConsoleWindow::setSeverityFilter()
   uint8_t mask = 0;
 
   if (ui.checkDebug->isChecked()) {
-    mask |= rosgraph_msgs::Log::DEBUG;
+    mask |= LogLevelMask::DEBUG;
   }
   if (ui.checkInfo->isChecked()) {
-    mask |= rosgraph_msgs::Log::INFO;
+    mask |= LogLevelMask::INFO;
   }
   if (ui.checkWarn->isChecked()) {
-    mask |= rosgraph_msgs::Log::WARN;
+    mask |= LogLevelMask::WARN;
   }
   if (ui.checkError->isChecked()) {
-    mask |= rosgraph_msgs::Log::ERROR;
+    mask |= LogLevelMask::ERROR;
   }
   if (ui.checkFatal->isChecked()) {
-    mask |= rosgraph_msgs::Log::FATAL;
+    mask |= LogLevelMask::FATAL;
   }
 
   QSettings settings;

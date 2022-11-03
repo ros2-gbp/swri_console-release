@@ -34,22 +34,42 @@
 #include <QObject>
 #include <QAbstractListModel>
 #include <QStringList>
-#include <rosgraph_msgs/Log.h>
+
+#include <rclcpp/rclcpp.hpp>
+#include <rcl_interfaces/msg/log.hpp>
 #include <deque>
-#include <ros/time.h>
+#include <rclcpp/time.hpp>
 
 namespace swri_console
 {
 struct LogEntry
 {
-  ros::Time stamp;
-  uint8_t level;  
-  std::string node;  
+  rclcpp::Time stamp;
+  uint8_t level_mask;
+  std::string node;
   std::string file;
   std::string function;
   uint32_t line;
   QStringList text;
   uint32_t seq;
+
+  void setLogLvl(uint8_t ros_log_lvl)
+  {
+    level = ros_log_lvl;
+    switch (ros_log_lvl) {
+      case rcl_interfaces::msg::Log::DEBUG : level_mask = 0x01; break;
+      case rcl_interfaces::msg::Log::INFO : level_mask = 0x02; break;
+      case rcl_interfaces::msg::Log::WARN : level_mask = 0x04; break;
+      case rcl_interfaces::msg::Log::ERROR : level_mask = 0x08; break;
+      case rcl_interfaces::msg::Log::FATAL : level_mask = 0x10; break;
+      default: level_mask = 0x01; break;
+    }
+  }
+
+  uint8_t getLogLvl(void) const { return level; }
+
+private:
+  uint8_t level;
 };
 
 class LogDatabase : public QObject
@@ -58,11 +78,11 @@ class LogDatabase : public QObject
   
 public:
   LogDatabase();
-  ~LogDatabase();
+  ~LogDatabase() override = default;
   
   void clear();
   const std::deque<LogEntry>& log() { return log_; }
-  const ros::Time& minTime() const { return min_time_; }
+  const rclcpp::Time& minTime() const { return min_time_; }
 
   const std::map<std::string, size_t>& messageCounts() const { return msg_counts_; }
 
@@ -72,7 +92,7 @@ public:
   void minTimeUpdated();
 
 public Q_SLOTS:
-  void queueMessage(const rosgraph_msgs::LogConstPtr msg);
+  void queueMessage(const rcl_interfaces::msg::Log::ConstSharedPtr msg);
   void processQueue();
 
 private:  
@@ -80,7 +100,7 @@ private:
   std::deque<LogEntry> log_;
   std::deque<LogEntry> new_msgs_;
 
-  ros::Time min_time_;
+  rclcpp::Time min_time_;
 };  // class LogDatabase
 }  // namespace swri_console 
 #endif  // SWRI_CONSOLE_LOG_DATABASE_H_
