@@ -1,0 +1,12 @@
+Source: ros-galactic-swri-console
+Section: misc
+Priority: optional
+Maintainer: P. J. Reed <preed@swri.org>
+Build-Depends: debhelper (>= 9.0.0), libboost-thread-dev, libqt5core5a, libqt5gui5, libqt5opengl5-dev, libqt5widgets5, ros-galactic-ament-cmake, ros-galactic-rcl-interfaces, ros-galactic-rclcpp, ros-galactic-rosidl-default-generators, ros-galactic-ros-workspace
+Homepage: http://ros.org/wiki/swri_console
+Standards-Version: 3.9.2
+
+Package: ros-galactic-swri-console
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, libboost-thread-dev, libqt5core5a, libqt5gui5, libqt5widgets5, ros-galactic-rcl-interfaces, ros-galactic-rclcpp, ros-galactic-rosidl-default-runtime, ros-galactic-ros-workspace
+Description: A rosout GUI viewer developed at Southwest Research Insititute as an alternative to rqt_console.
