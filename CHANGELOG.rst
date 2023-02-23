@@ -2,6 +2,20 @@
 Changelog for package swri_console
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+2.0.3 (2023-02-23)
+------------------
+* Fix QoS on Humble (`#55 <https://github.com/swri-robotics/swri_console/issues/55>`_)
+  * Use Humble's Default rosout QoS Settings
+  Co-authored-by: David Anthony <david.anthony@swri.org>
+  Co-authored-by: Tony Najjar <tony.najjar.1997@gmail.com>
+* Contributors: David Anthony, Tony Najjar
+
+2.0.2 (2022-11-03)
+------------------
+* Update Qt Flags (`#52 <https://github.com/swri-robotics/swri_console/issues/52>`_)
+  * Update to use new flags
+* Contributors: David Anthony
+
 2.0.1 (2022-11-03)
 ------------------
 * Switching to system default QoS (`#50 <https://github.com/swri-robotics/swri_console/issues/50>`_)
