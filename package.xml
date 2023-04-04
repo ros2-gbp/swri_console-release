@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <package format="2">
   <name>swri_console</name>
-  <version>2.0.3</version>
+  <version>2.0.4</version>
   <description>
 
      A rosout GUI viewer developed at Southwest Research Insititute as an
@@ -16,6 +16,7 @@
   <buildtool_depend>ament_cmake</buildtool_depend>
   <buildtool_depend>rosidl_default_generators</buildtool_depend>
   <build_depend>libqt5-opengl-dev</build_depend>
+  <build_depend>ros_environment</build_depend>
   <depend>libboost-thread-dev</depend>
   <depend>libqt5-core</depend>
   <depend>libqt5-gui</depend>
