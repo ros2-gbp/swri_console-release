@@ -1,3 +1,26 @@
+## swri_console (rolling) - 2.0.4-1
+
+The packages in the `swri_console` repository were released into the `rolling` distro by running `/usr/bin/bloom-release --edit --rosdistro rolling swri_console` on `Wed, 20 Sep 2023 15:26:28 -0000`
+
+The `swri_console` package was released.
+
+Version of package(s) in repository `swri_console`:
+
+- upstream repository: https://github.com/swri-robotics/swri_console.git
+- release repository: https://github.com/ros2-gbp/swri_console-release.git
+- rosdistro version: `2.0.3-2`
+- old version: `2.0.3-2`
+- new version: `2.0.4-1`
+
+Versions of tools used:
+
+- bloom version: `0.11.2`
+- catkin_pkg version: `1.0.0`
+- rosdep version: `0.22.2`
+- rosdistro version: `0.9.0`
+- vcstools version: `0.1.42`
+
+
 ## swri_console (iron) - 2.0.4-1
 
 The packages in the `swri_console` repository were released into the `iron` distro by running `/usr/bin/bloom-release --edit --rosdistro iron swri_console` on `Wed, 07 Jun 2023 22:06:45 -0000`
