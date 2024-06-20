@@ -32,8 +32,6 @@
 #include <cstdio>
 #include <set>
 
-// #include <rosgraph_msgs/Log.h>
-// #include <ros/master.h>  // required for getURI, VCM 12 April 2017
 #include <rclcpp/rclcpp.hpp>
 #include <rcl_interfaces/msg/log.hpp>
 
@@ -42,7 +40,6 @@
 #include <swri_console/log_database_proxy_model.h>
 #include <swri_console/node_list_model.h>
 #include <swri_console/settings_keys.h>
-#include <swri_console/defines.h>
 
 #include <QColorDialog>
 #include <QRegExp>
@@ -55,15 +52,15 @@
 #include <QMenu>
 #include <QSettings>
 
-// QString::SkipEmptyParts was deprecated in favor of Qt::SkipEmptyParts in
-// Qt 5.14.0
-#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
-  #define SPLIT_FLAG (Qt::SkipEmptyParts)
-#else
-  #define SPLIT_FLAG (QString::SkipEmptyParts)
-#endif
-
 using namespace Qt;
+
+namespace log_level_mask {
+  static constexpr uint8_t DEBUG = 1 << 0;
+  static constexpr uint8_t INFO = 1 << 1;
+  static constexpr uint8_t WARN = 1 << 2;
+  static constexpr uint8_t ERROR = 1 << 3;
+  static constexpr uint8_t FATAL = 1 << 4;
+};
 
 namespace swri_console {
 
@@ -104,6 +101,9 @@ ConsoleWindow::ConsoleWindow(LogDatabase *db)
 
   QObject::connect(ui.action_AbsoluteTimestamps, SIGNAL(toggled(bool)),
                    db_proxy_, SLOT(setAbsoluteTime(bool)));
+
+  QObject::connect(ui.action_Use_human_readable_time, SIGNAL(toggled(bool)),
+                   db_proxy_, SLOT(setHumanReadableTime(bool)));
 
   QObject::connect(ui.action_ShowTimestamps, SIGNAL(toggled(bool)),
                    db_proxy_, SLOT(setDisplayTime(bool)));
@@ -275,7 +275,7 @@ void ConsoleWindow::nodeSelectionChanged()
   db_proxy_->setNodeFilter(nodes);
 
   for (int i = 0; i < node_names.size(); i++) {
-    node_names[i] = node_names[i].split("/", SPLIT_FLAG).last();
+    node_names[i] = node_names[i].split("/", Qt::SkipEmptyParts).last();
   }
     
   setWindowTitle(QString("SWRI Console (") + node_names.join(", ") + ")");
@@ -286,19 +286,19 @@ void ConsoleWindow::setSeverityFilter()
   uint8_t mask = 0;
 
   if (ui.checkDebug->isChecked()) {
-    mask |= LogLevelMask::DEBUG;
+    mask |= log_level_mask::DEBUG;
   }
   if (ui.checkInfo->isChecked()) {
-    mask |= LogLevelMask::INFO;
+    mask |= log_level_mask::INFO;
   }
   if (ui.checkWarn->isChecked()) {
-    mask |= LogLevelMask::WARN;
+    mask |= log_level_mask::WARN;
   }
   if (ui.checkError->isChecked()) {
-    mask |= LogLevelMask::ERROR;
+    mask |= log_level_mask::ERROR;
   }
   if (ui.checkFatal->isChecked()) {
-    mask |= LogLevelMask::FATAL;
+    mask |= log_level_mask::FATAL;
   }
 
   QSettings settings;
@@ -394,7 +394,7 @@ void ConsoleWindow::setFollowNewest(bool follow)
 
 void ConsoleWindow::includeFilterUpdated(const QString &text)
 {
-  QStringList items = text.split(";", SPLIT_FLAG);
+  QStringList items = text.split(";", Qt::SkipEmptyParts);
   QStringList filtered;
   
   for (int i = 0; i < items.size(); i++) {
@@ -412,7 +412,7 @@ void ConsoleWindow::includeFilterUpdated(const QString &text)
 
 void ConsoleWindow::excludeFilterUpdated(const QString &text)
 {
-  QStringList items = text.split(";", SPLIT_FLAG);
+  QStringList items = text.split(";", Qt::SkipEmptyParts);
   QStringList filtered;
   
   for (int i = 0; i < items.size(); i++) {
@@ -629,6 +629,7 @@ void ConsoleWindow::loadSettings()
   // First, load all the boolean settings...
   loadBooleanSetting(SettingsKeys::DISPLAY_TIMESTAMPS, ui.action_ShowTimestamps);
   loadBooleanSetting(SettingsKeys::ABSOLUTE_TIMESTAMPS, ui.action_AbsoluteTimestamps);
+  loadBooleanSetting(SettingsKeys::HUMAN_READABLE_TIME, ui.action_Use_human_readable_time);
   loadBooleanSetting(SettingsKeys::USE_REGEXPS, ui.action_RegularExpressions);
   loadBooleanSetting(SettingsKeys::COLORIZE_LOGS, ui.action_ColorizeLogs);
   loadBooleanSetting(SettingsKeys::FOLLOW_NEWEST, ui.checkFollowNewest);
@@ -637,11 +638,13 @@ void ConsoleWindow::loadSettings()
   // into a single integer mask under the hood.  First they have to be loaded from the settings,
   // then set in the UI, then the mask has to actually be applied.
   QSettings settings;
+  bool displayTimestamp = settings.value(SettingsKeys::DISPLAY_TIMESTAMPS, true).toBool();
   bool showDebug = settings.value(SettingsKeys::SHOW_DEBUG, true).toBool();
   bool showInfo = settings.value(SettingsKeys::SHOW_INFO, true).toBool();
   bool showWarn = settings.value(SettingsKeys::SHOW_WARN, true).toBool();
   bool showError = settings.value(SettingsKeys::SHOW_ERROR, true).toBool();
   bool showFatal = settings.value(SettingsKeys::SHOW_FATAL, true).toBool();
+  ui.action_Use_human_readable_time->setEnabled(displayTimestamp);
   ui.checkDebug->setChecked(showDebug);
   ui.checkInfo->setChecked(showInfo);
   ui.checkWarn->setChecked(showWarn);
