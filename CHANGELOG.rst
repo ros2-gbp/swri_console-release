@@ -2,10 +2,10 @@
 Changelog for package swri_console
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-2.0.7 (2025-06-12)
+2.1.0 (2025-06-12)
 ------------------
 * Update README.md
-* Update industrial_ci.yml
+* Updating for new build commands and constants in Kilted and later (`#71 <https://github.com/swri-robotics/swri_console/issues/71>`_)
 * Updating CI and readme to remove references to Iron
 * Update industrial_ci.yml
   Updating to use ROS-I CI with support for new versions of Python.
