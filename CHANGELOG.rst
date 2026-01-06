@@ -2,6 +2,13 @@
 Changelog for package swri_console
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+2.1.1 (2026-01-06)
+------------------
+* Using best available QoS if function is available (`#73 <https://github.com/swri-robotics/swri_console/issues/73>`_)
+  * Using best available QoS if function is available
+  * Updating logic for selecting QoS
+* Contributors: David Anthony
+
 2.1.0 (2025-06-12)
 ------------------
 * Update README.md
