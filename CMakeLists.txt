@@ -14,7 +14,6 @@ project(swri_console)
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rcl_interfaces REQUIRED)
-find_package(rmw REQUIRED)
 find_package(rosbag2_transport REQUIRED)
 
 ### QT PACKAGES ###
@@ -22,13 +21,14 @@ find_package(Qt5Core REQUIRED)
 find_package(Qt5Gui REQUIRED)
 find_package(Qt5Widgets REQUIRED)
 
+find_package(Boost COMPONENTS thread REQUIRED)
+
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
 include_directories(include)
 
 set(UI_FILES
-  ui/console_window.ui
-)
+  ui/console_window.ui)
 set(HEADER_FILES
   include/swri_console/bag_reader.h
   include/swri_console/console_master.h
@@ -40,7 +40,6 @@ set(HEADER_FILES
   include/swri_console/rosout_log_loader.h
   include/swri_console/ros_thread.h
   )
-
 set(SRC_FILES
   src/bag_reader.cpp
   src/console_master.cpp
@@ -53,34 +52,31 @@ set(SRC_FILES
   src/ros_thread.cpp
   src/settings_keys.cpp
   )
-
 qt5_add_resources(RCC_SRCS resources/images.qrc)
 qt5_wrap_ui(SRC_FILES ${UI_FILES})
 qt5_wrap_cpp(SRC_FILES ${HEADER_FILES})
 
 add_executable(swri_console ${HEADER_FILES} ${SRC_FILES} ${RCC_SRCS} src/main.cpp)
 
-target_link_libraries(swri_console PUBLIC
+target_link_libraries(swri_console
   Qt5::Core
   Qt5::Gui
   Qt5::Widgets
-  ${rcl_interfaces_TARGETS}
-  rclcpp::rclcpp
-  ${rosbag2_transport_TARGETS}
-  rmw::rmw
+  Boost::thread
 )
 
-install(TARGETS ${PROJECT_NAME}
-  DESTINATION lib/${PROJECT_NAME}
-)
-
-ament_export_dependencies(
+ament_target_dependencies(${PROJECT_NAME}
   ament_cmake
-  Qt5Core
-  Qt5Gui
-  Qt5Widgets
   rclcpp
   rcl_interfaces
   rosbag2_transport
-  rmw)
+)
+
+install(TARGETS ${PROJECT_NAME}
+  RUNTIME DESTINATION lib/${PROJECT_NAME}
+  LIBRARY DESTINATION lib
+  ARCHIVE DESTINATION lib
+)
+
+ament_export_dependencies(${RUNTIME_DEPS})
 ament_package()
