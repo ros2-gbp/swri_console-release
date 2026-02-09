@@ -67,6 +67,7 @@ void RosThread::run()
   }
 }
 
+
 void RosThread::shutdown()
 {
   is_running_ = false;
