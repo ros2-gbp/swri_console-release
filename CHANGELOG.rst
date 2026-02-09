@@ -2,17 +2,23 @@
 Changelog for package swri_console
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-2.0.8 (2026-01-06)
+2.1.2 (2026-02-09)
 ------------------
-* Backport off https://github.com/swri-robotics/swri_console/pull/73 (`#74 <https://github.com/swri-robotics/swri_console/issues/74>`_)
-  * Backport off https://github.com/swri-robotics/swri_console/pull/73
-* Updating README with information about all distributions.
+* Include <limits> for std::numeric_limits (`#75 <https://github.com/swri-robotics/swri_console/issues/75>`_)
+  * Include <limits> for std::numeric_limits
+* Contributors: Tim Clephas
+
+2.1.1 (2026-01-06)
+------------------
+* Using best available QoS if function is available (`#73 <https://github.com/swri-robotics/swri_console/issues/73>`_)
+  * Using best available QoS if function is available
+  * Updating logic for selecting QoS
 * Contributors: David Anthony
 
-2.0.7 (2025-06-12)
+2.1.0 (2025-06-12)
 ------------------
 * Update README.md
-* Update industrial_ci.yml
+* Updating for new build commands and constants in Kilted and later (`#71 <https://github.com/swri-robotics/swri_console/issues/71>`_)
 * Updating CI and readme to remove references to Iron
 * Update industrial_ci.yml
   Updating to use ROS-I CI with support for new versions of Python.
