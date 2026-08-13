@@ -1,6 +1,6 @@
 // *****************************************************************************
 //
-// Copyright (c) 2015, Southwest Research Institute® (SwRI®)
+// Copyright (c) 2026, Southwest Research Institute® (SwRI®)
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -42,7 +42,8 @@
 #include <swri_console/settings_keys.h>
 
 #include <QColorDialog>
-#include <QRegExp>
+#include <QInputDialog>
+#include <QRegularExpression>
 #include <QApplication>
 #include <QClipboard>
 #include <QDateTime>
@@ -51,6 +52,7 @@
 #include <QScrollBar>
 #include <QMenu>
 #include <QSettings>
+#include <QVariant>
 
 using namespace Qt;
 
@@ -123,8 +125,14 @@ ConsoleWindow::ConsoleWindow(LogDatabase *db)
   QObject::connect(ui.action_RegularExpressions, SIGNAL(toggled(bool)),
                    this, SLOT(updateExcludeLabel()));
 
+  QObject::connect(ui.action_RegularExpressions, SIGNAL(toggled(bool)),
+                   this, SLOT(updateHighlightLabel()));
+
   QObject::connect(ui.action_SelectFont, SIGNAL(triggered(bool)),
                    this, SIGNAL(selectFont()));
+
+  QObject::connect(ui.action_MessageFormat, SIGNAL(triggered(bool)),
+                   this, SLOT(selectMessageFormat()));
 
   QObject::connect(ui.action_ColorizeLogs, SIGNAL(toggled(bool)),
                    db_proxy_, SLOT(setColorizeLogs(bool)));
@@ -139,8 +147,10 @@ ConsoleWindow::ConsoleWindow(LogDatabase *db)
                    this, SLOT(setErrorColor()));
   QObject::connect(ui.fatalColorWidget, SIGNAL(clicked(bool)),
                    this, SLOT(setFatalColor()));
+  QObject::connect(ui.highlightColorWidget, SIGNAL(clicked(bool)),
+                   this, SLOT(setHighlightColor()));
 
-  ui.nodeList->setModel(node_list_model_);  
+  ui.nodeList->setModel(node_list_model_);
   ui.messageList->setModel(db_proxy_);
   ui.messageList->setUniformItemSizes(true);
 
@@ -152,6 +162,11 @@ ConsoleWindow::ConsoleWindow(LogDatabase *db)
     SLOT(nodeSelectionChanged()));
 
   ui.nodeList->installEventFilter(node_click_handler_);
+
+  QObject::connect(node_click_handler_, SIGNAL(nodeColorSelected(const std::string&, const QColor&)),
+                    this, SLOT(setNodeColor(const std::string&, const QColor&)));
+  QObject::connect(node_click_handler_, SIGNAL(nodeColorCleared(const std::string&)),
+                    this, SLOT(clearNodeColor(const std::string&)));
 
   QObject::connect(
     ui.checkDebug, SIGNAL(toggled(bool)),
@@ -193,7 +208,20 @@ ConsoleWindow::ConsoleWindow(LogDatabase *db)
 
   QObject::connect(
     ui.excludeText, SIGNAL(textChanged(const QString &)),
-    this, SLOT(excludeFilterUpdated(const QString &)));
+    this, SLOT(excludeTextEdited()));
+  QObject::connect(
+    ui.excludeText, SIGNAL(cursorPositionChanged(int, int)),
+    this, SLOT(excludeTextEdited()));
+  QObject::connect(
+    ui.excludeText, SIGNAL(editingFinished()),
+    this, SLOT(excludeTextEdited()));
+  QObject::connect(
+    ui.action_RegularExpressions, SIGNAL(toggled(bool)),
+    this, SLOT(excludeTextEdited()));
+
+  QObject::connect(
+    ui.highlightText, SIGNAL(textChanged(const QString &)),
+    this, SLOT(highlightFilterUpdated(const QString &)));
 
   // Connect 'Search' text modification to searchIndex, VCM 13 April 2017
   QObject::connect(
@@ -410,11 +438,13 @@ void ConsoleWindow::includeFilterUpdated(const QString &text)
   updateIncludeLabel();
 }
 
-void ConsoleWindow::excludeFilterUpdated(const QString &text)
+void ConsoleWindow::highlightFilterUpdated(const QString &text)
 {
+  // Unlike exclude, highlighting never hides anything, so there's no harm
+  // in applying it live as the user types -- same as include.
   QStringList items = text.split(";", Qt::SkipEmptyParts);
   QStringList filtered;
-  
+
   for (int i = 0; i < items.size(); i++) {
     QString x = items[i].trimmed();
     if (!x.isEmpty()) {
@@ -422,8 +452,65 @@ void ConsoleWindow::excludeFilterUpdated(const QString &text)
     }
   }
 
-  db_proxy_->setExcludeFilters(filtered);
-  db_proxy_->setExcludeRegexpPattern(text);
+  db_proxy_->setHighlightFilters(filtered);
+  db_proxy_->setHighlightRegexpPattern(text);
+  updateHighlightLabel();
+}
+
+void ConsoleWindow::excludeTextEdited()
+{
+  QString text = ui.excludeText->text();
+  bool editing = ui.excludeText->hasFocus();
+
+  if (ui.action_RegularExpressions->isChecked()) {
+    // There's no natural way to split a single regexp into "committed" and
+    // "in progress" pieces, so treat the whole pattern as a preview while
+    // the field has focus, and only commit it as an active filter once the
+    // user moves on (matches the plain-string behavior below).
+    if (editing) {
+      db_proxy_->setExcludePreviewFilter(text);
+    } else {
+      db_proxy_->setExcludeRegexpPattern(text);
+      db_proxy_->setExcludePreviewFilter(QString());
+    }
+  } else {
+    QString pending;
+    QString committedText = text;
+
+    if (editing) {
+      int cursor = ui.excludeText->cursorPosition();
+
+      // QString::lastIndexOf(ch, -1) means "search from the end", so guard
+      // the cursor == 0 case explicitly rather than passing cursor - 1 == -1
+      // and getting a match from the wrong end of the string.
+      int start = 0;
+      if (cursor > 0) {
+        int prevSemicolon = text.lastIndexOf(';', cursor - 1);
+        start = (prevSemicolon == -1) ? 0 : prevSemicolon + 1;
+      }
+
+      int end = text.indexOf(';', cursor);
+      if (end == -1) {
+        end = text.length();
+      }
+      pending = text.mid(start, end - start).trimmed();
+      committedText.remove(start, end - start);
+    }
+
+    QStringList items = committedText.split(";", Qt::SkipEmptyParts);
+    QStringList filtered;
+
+    for (int i = 0; i < items.size(); i++) {
+      QString x = items[i].trimmed();
+      if (!x.isEmpty()) {
+        filtered.append(x);
+      }
+    }
+
+    db_proxy_->setExcludeFilters(filtered);
+    db_proxy_->setExcludePreviewFilter(pending);
+  }
+
   db_proxy_->clearSearchFailure();  // resets failed search variables, VCM 27 April 2017
   updateExcludeLabel();
 }
@@ -511,10 +598,38 @@ void ConsoleWindow::updateExcludeLabel()
   }
 }
 
+void ConsoleWindow::updateHighlightLabel()
+{
+  if (db_proxy_->isHighlightValid()) {
+    ui.highlightLabel->setText("Highlight");
+  } else {
+    ui.highlightLabel->setText("<font color='red'>Highlight</font>");
+  }
+}
+
 void ConsoleWindow::setFont(const QFont &font)
 {
   ui.messageList->setFont(font);
   ui.nodeList->setFont(font);
+}
+
+void ConsoleWindow::selectMessageFormat()
+{
+  bool ok = false;
+  QString format = QInputDialog::getText(
+    this,
+    tr("Message Format"),
+    tr("Format string. Supported tokens: {severity} {name} {function_name}\n"
+       "{file_name} {line_number} {time} {message}\n"
+       "Leave blank to use the Show Timestamps/logger name/function name\n"
+       "options instead."),
+    QLineEdit::Normal,
+    db_proxy_->outputFormat(),
+    &ok);
+
+  if (ok) {
+    db_proxy_->setOutputFormat(format);
+  }
 }
 
 void ConsoleWindow::setDebugColor()
@@ -542,6 +657,21 @@ void ConsoleWindow::setFatalColor()
   chooseButtonColor(ui.fatalColorWidget);
 }
 
+void ConsoleWindow::setHighlightColor()
+{
+  chooseButtonColor(ui.highlightColorWidget);
+}
+
+void ConsoleWindow::setNodeColor(const std::string& node, const QColor& color)
+{
+  db_proxy_->setNodeColor(node, color);
+}
+
+void ConsoleWindow::clearNodeColor(const std::string& node)
+{
+  db_proxy_->clearNodeColor(node);
+}
+
 void ConsoleWindow::chooseButtonColor(QPushButton* widget)
 {
   QColor old_color = getButtonColor(widget);
@@ -554,10 +684,11 @@ void ConsoleWindow::chooseButtonColor(QPushButton* widget)
 QColor ConsoleWindow::getButtonColor(const QPushButton* button) const
 {
   QString ss = button->styleSheet();
-  QRegExp re("background: (#\\w*);");
+  QRegularExpression re("background: (#\\w*);");
   QColor old_color;
-  if (re.indexIn(ss) >= 0) {
-    old_color = QColor(re.cap(1));
+  QRegularExpressionMatch match = re.match(ss);
+  if (match.hasMatch()) {
+    old_color = QColor(match.captured(1));
   }
   return old_color;
 }
@@ -586,6 +717,9 @@ void ConsoleWindow::updateButtonColor(QPushButton* widget, const QColor& color)
   else if (widget == ui.fatalColorWidget) {
     db_proxy_->setFatalColor(color);
   }
+  else if (widget == ui.highlightColorWidget) {
+    db_proxy_->setHighlightColor(color);
+  }
   else {
     qWarning("Unexpected widget passed to ConsoleWindow::updateButtonColor.");
   }
@@ -598,10 +732,13 @@ void ConsoleWindow::loadColorButtonSetting(const QString& key, QPushButton* butt
   // The color buttons don't have a default value set in the .ui file, so we need to
   // supply defaults for them here in case the appropriate setting isn't found.
   if (button == ui.debugColorWidget) {
-    defaultColor = Qt::gray;
+    // PlaceholderText is Qt's own "dimmed but still legible" text role, so
+    // it stays readable against the current theme's background without us
+    // having to hand-pick a gray that only works for one theme.
+    defaultColor = QApplication::palette().color(QPalette::PlaceholderText);
   }
   else if (button == ui.infoColorWidget) {
-    defaultColor = Qt::black;
+    defaultColor = QApplication::palette().color(QPalette::Text);
   }
   else if (button == ui.warnColorWidget) {
     defaultColor = QColor(255, 127, 0);
@@ -611,6 +748,11 @@ void ConsoleWindow::loadColorButtonSetting(const QString& key, QPushButton* butt
   }
   else if (button == ui.fatalColorWidget) {
     defaultColor = Qt::magenta;
+  }
+  else if (button == ui.highlightColorWidget) {
+    // Highlight is the same role Qt uses for its own selection background,
+    // so it's already guaranteed to read well against the current theme.
+    defaultColor = QApplication::palette().color(QPalette::Highlight);
   }
   QColor color = settings.value(key, defaultColor).value<QColor>();
   updateButtonColor(button, color);
@@ -658,12 +800,30 @@ void ConsoleWindow::loadSettings()
   loadColorButtonSetting(SettingsKeys::WARN_COLOR, ui.warnColorWidget);
   loadColorButtonSetting(SettingsKeys::ERROR_COLOR, ui.errorColorWidget);
   loadColorButtonSetting(SettingsKeys::FATAL_COLOR, ui.fatalColorWidget);
+  loadColorButtonSetting(SettingsKeys::HIGHLIGHT_COLOR, ui.highlightColorWidget);
+
+  QVariantMap nodeColors = settings.value(SettingsKeys::NODE_COLORS).toMap();
+  for (auto it = nodeColors.constBegin(); it != nodeColors.constEnd(); ++it) {
+    db_proxy_->setNodeColor(it.key().toStdString(), it.value().value<QColor>());
+  }
+
+  // RCUTILS_CONSOLE_OUTPUT_FORMAT, if set, takes priority every launch (it's
+  // meant to reflect the current shell environment, not a one-time default).
+  // Otherwise fall back to whatever custom format the user last saved via
+  // the Message Format dialog, or the legacy fixed layout if neither is set.
+  QString envOutputFormat = QString::fromLocal8Bit(qgetenv("RCUTILS_CONSOLE_OUTPUT_FORMAT"));
+  QString outputFormat = envOutputFormat.isEmpty()
+    ? settings.value(SettingsKeys::OUTPUT_FORMAT, "").toString()
+    : envOutputFormat;
+  db_proxy_->setOutputFormat(outputFormat);
 
   // Finally, load the filter contents.
   QString includeFilter = settings.value(SettingsKeys::INCLUDE_FILTER, "").toString();
   ui.includeText->setText(includeFilter);
   QString excludeFilter = settings.value(SettingsKeys::EXCLUDE_FILTER, "").toString();
   ui.excludeText->setText(excludeFilter);
+  QString highlightFilter = settings.value(SettingsKeys::HIGHLIGHT_FILTER, "").toString();
+  ui.highlightText->setText(highlightFilter);
 
   bool alternate_row_colors = settings.value(SettingsKeys::ALTERNATE_LOG_ROW_COLORS, true).toBool();
   ui.messageList->setAlternatingRowColors(alternate_row_colors);
