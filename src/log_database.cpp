@@ -1,6 +1,6 @@
 // *****************************************************************************
 //
-// Copyright (c) 2015, Southwest Research Institute® (SwRI®)
+// Copyright (c) 2026, Southwest Research Institute® (SwRI®)
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -67,6 +67,13 @@ void LogDatabase::queueMessage(const rcl_interfaces::msg::Log::ConstSharedPtr ms
   log.text = QString(msg->msg.c_str()).split('\n');
   // log.seq = msg->header.seq;
   new_msgs_.push_back(log);
+}
+
+void LogDatabase::queueMessages(const std::vector<rcl_interfaces::msg::Log::ConstSharedPtr>& msgs)
+{
+  for (const auto& msg : msgs) {
+    queueMessage(msg);
+  }
 }
 
 void LogDatabase::processQueue()
