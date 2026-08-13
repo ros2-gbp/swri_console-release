@@ -1,6 +1,6 @@
 // *****************************************************************************
 //
-// Copyright (c) 2015, Southwest Research Institute® (SwRI®)
+// Copyright (c) 2026, Southwest Research Institute® (SwRI®)
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -47,6 +47,8 @@ ConsoleMaster::ConsoleMaster(int argc, char** argv):
   // In order for that to work, we have to manually register the message type with
   // Qt's QMetaType system.
   qRegisterMetaType<rcl_interfaces::msg::Log::ConstSharedPtr>("rcl_interfaces::msg::Log::ConstSharedPtr");
+  qRegisterMetaType<std::vector<rcl_interfaces::msg::Log::ConstSharedPtr>>(
+    "std::vector<rcl_interfaces::msg::Log::ConstSharedPtr>");
 
   QObject::connect(&bag_reader_, SIGNAL(logReceived(const rcl_interfaces::msg::Log::ConstSharedPtr )),
                    &db_, SLOT(queueMessage(const rcl_interfaces::msg::Log::ConstSharedPtr) ));
@@ -100,8 +102,8 @@ void ConsoleMaster::createNewWindow()
     // There's only one ROS thread, and it services every window.  We need to initialize
     // it and its connections to the LogDatabase when we first create a window, but
     // after that it doesn't need to be modified again.
-    QObject::connect(&ros_thread_, SIGNAL(logReceived(const rcl_interfaces::msg::Log::ConstSharedPtr )),
-                     &db_, SLOT(queueMessage(const rcl_interfaces::msg::Log::ConstSharedPtr) ));
+    QObject::connect(&ros_thread_, SIGNAL(logReceived(std::vector<rcl_interfaces::msg::Log::ConstSharedPtr>)),
+                     &db_, SLOT(queueMessages(const std::vector<rcl_interfaces::msg::Log::ConstSharedPtr>&) ));
 
     QObject::connect(&ros_thread_, SIGNAL(spun()),
                      &db_, SLOT(processQueue()));
