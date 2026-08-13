@@ -1,3 +1,26 @@
+## swri_console (jazzy) - 2.3.0-1
+
+The packages in the `swri_console` repository were released into the `jazzy` distro by running `/usr/bin/bloom-release --edit --rosdistro jazzy swri_console` on `Thu, 13 Aug 2026 03:06:29 -0000`
+
+The `swri_console` package was released.
+
+Version of package(s) in repository `swri_console`:
+
+- upstream repository: https://github.com/swri-robotics/swri_console.git
+- release repository: https://github.com/ros2-gbp/swri_console-release.git
+- rosdistro version: `2.1.4-1`
+- old version: `2.1.4-1`
+- new version: `2.3.0-1`
+
+Versions of tools used:
+
+- bloom version: `0.14.3`
+- catkin_pkg version: `1.1.0`
+- rosdep version: `0.26.0`
+- rosdistro version: `1.0.1`
+- vcstools version: `0.1.42`
+
+
 ## swri_console (humble) - 2.3.0-1
 
 The packages in the `swri_console` repository were released into the `humble` distro by running `/usr/bin/bloom-release --edit --rosdistro humble swri_console` on `Thu, 13 Aug 2026 02:58:05 -0000`
