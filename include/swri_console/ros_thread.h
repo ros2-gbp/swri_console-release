@@ -1,6 +1,6 @@
 // *****************************************************************************
 //
-// Copyright (c) 2015, Southwest Research Institute® (SwRI®)
+// Copyright (c) 2026, Southwest Research Institute® (SwRI®)
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -33,7 +33,11 @@
 
 #include <QThread>
 
+#include <memory>
+#include <vector>
+
 #include <rclcpp/rclcpp.hpp>
+#include <rclcpp/executors/single_threaded_executor.hpp>
 #include <rcl_interfaces/msg/log.hpp>
 #include <QMetaType>
 
@@ -55,10 +59,11 @@ namespace swri_console
      */
     void connected(bool);
     /**
-     * Emitted every time a log message is received.  This can be emitted multiple times per spin of
-     * the ROS core; wait until spun() is emitted to do any processing on them.
+     * Emitted with every batch of log messages drained from the ROS subscription queue
+     * in a single spin.  This can be emitted multiple times per spin of the ROS core;
+     * wait until spun() is emitted to do any processing on them.
      */
-    void logReceived(rcl_interfaces::msg::Log::ConstSharedPtr msg);
+    void logReceived(std::vector<rcl_interfaces::msg::Log::ConstSharedPtr> msgs);
     /**
      * Emitted after every time ros::spinOnce() completes.
      */
@@ -79,6 +84,7 @@ namespace swri_console
 
     rclcpp::Node::SharedPtr nh_;
     rclcpp::Subscription<rcl_interfaces::msg::Log>::SharedPtr rosout_sub_;
+    std::unique_ptr<rclcpp::executors::SingleThreadedExecutor> executor_;
   };
 }
 
