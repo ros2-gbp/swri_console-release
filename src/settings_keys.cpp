@@ -1,6 +1,6 @@
 // *****************************************************************************
 //
-// Copyright (c) 2015, Southwest Research Institute® (SwRI®)
+// Copyright (c) 2026, Southwest Research Institute® (SwRI®)
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -54,4 +54,8 @@ namespace swri_console
   const QString SettingsKeys::FATAL_COLOR = "Colors/FatalColor";
   const QString SettingsKeys::COLORIZE_LOGS = "Colors/ColorizeLogs";
   const QString SettingsKeys::ALTERNATE_LOG_ROW_COLORS = "Logs/AlternateRowColors";
+  const QString SettingsKeys::OUTPUT_FORMAT = "UI/OutputFormat";
+  const QString SettingsKeys::HIGHLIGHT_FILTER = "Filters/HighlightFilter";
+  const QString SettingsKeys::HIGHLIGHT_COLOR = "Colors/HighlightColor";
+  const QString SettingsKeys::NODE_COLORS = "Colors/NodeColors";
 }
