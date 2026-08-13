@@ -1,6 +1,6 @@
 // *****************************************************************************
 //
-// Copyright (c) 2015, Southwest Research Institute® (SwRI®)
+// Copyright (c) 2026, Southwest Research Institute® (SwRI®)
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -30,6 +30,8 @@
 
 #ifndef SWRI_CONSOLE_CONSOLE_WINDOW_H_
 #define SWRI_CONSOLE_CONSOLE_WINDOW_H_
+
+#include <string>
 
 #include <QtWidgets/QMainWindow>
 #include <QColor>
@@ -78,18 +80,24 @@ class ConsoleWindow : public QMainWindow {
   void userScrolled(int);
 
   void includeFilterUpdated(const QString &);
-  void excludeFilterUpdated(const QString &);
+  void excludeTextEdited();
+  void highlightFilterUpdated(const QString &);
   void searchIndex();  // VM 4/13/2017
   void updateIncludeLabel();
   void updateExcludeLabel();
+  void updateHighlightLabel();
 
   void setFont(const QFont &font);
+  void selectMessageFormat();
 
   void setDebugColor();
   void setInfoColor();
   void setWarnColor();
   void setErrorColor();
   void setFatalColor();
+  void setHighlightColor();
+  void setNodeColor(const std::string& node, const QColor& color);
+  void clearNodeColor(const std::string& node);
   void prevIndex();
   void nextIndex();
 

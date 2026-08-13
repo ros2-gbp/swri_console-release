@@ -1,6 +1,6 @@
 // *****************************************************************************
 //
-// Copyright (c) 2015, Southwest Research Institute® (SwRI®)
+// Copyright (c) 2026, Southwest Research Institute® (SwRI®)
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -17,12 +17,12 @@
 // THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
 // AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
 // IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-// ARE DISCLAIMED. IN NO EVENT SHALL Southwest Research Institute® BE LIABLE 
-// FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL 
-// DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR 
-// SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER 
-// CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT 
-// LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY 
+// ARE DISCLAIMED. IN NO EVENT SHALL Southwest Research Institute® BE LIABLE
+// FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+// DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+// SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+// CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+// LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
 // OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH
 // DAMAGE.
 //
@@ -30,6 +30,8 @@
 
 #include <QFileDialog>
 #include <QDir>
+#include <QDebug>
+#include <QFileInfo>
 #include <QMessageBox>
 
 #include "swri_console/bag_reader.h"
@@ -42,7 +44,15 @@ void BagReader::readBagFile(const QString& filename)
   rosbag2_storage::StorageOptions storage_options;
   storage_options.uri = filename.toStdString();
   auto reader = rosbag2_transport::ReaderWriterFactory::make_reader(storage_options);
-  reader->open(storage_options);
+  try
+  {
+    reader->open(storage_options);
+  }
+  catch (const std::runtime_error& e)
+  {
+    qCritical() << "Bag " << filename << " failed to open with error: " << e.what();
+    return;
+  }
 
   while (reader->has_next()) {
     auto msg = reader->read_next();
@@ -60,6 +70,7 @@ void BagReader::readBagFile(const QString& filename)
     emit logReceived(log);
   }
 
+  qInfo() << "Finished reading " << filename;
   emit finishedReading();
 }
 
@@ -68,10 +79,20 @@ void BagReader::promptForBagFile()
   QString filename = QFileDialog::getOpenFileName(nullptr,
                                                   tr("Open Bag File"),
                                                   QDir::homePath(),
-                                                  tr("Bag Files (*.mcap)"));
+                                                  tr("Bag Files (*.mcap *.db3)"));
 
   if (filename != nullptr)
   {
-    readBagFile(filename);
+    QString bagDir = QFileInfo(filename).dir().absolutePath();
+    qInfo() << "Reading bag directory:" << bagDir;
+
+    if (!QFileInfo::exists(bagDir + "/metadata.yaml"))
+    {
+      qWarning() << "Bag directory " << bagDir << " does not contain metadata.yaml. Reading may fail.";
+      readBagFile(filename);
+      return;
+    }
+
+    readBagFile(bagDir);
   }
 }

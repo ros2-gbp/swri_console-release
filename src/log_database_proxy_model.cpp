@@ -1,6 +1,6 @@
 // *****************************************************************************
 //
-// Copyright (c) 2015, Southwest Research Institute® (SwRI®)
+// Copyright (c) 2026, Southwest Research Institute® (SwRI®)
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -42,13 +42,28 @@
 #include <swri_console/log_database.h>
 #include <swri_console/settings_keys.h>
 
+#include <QApplication>
 #include <QColor>
 #include <QFile>
 #include <QMessageBox>
 #include <QTextStream>
 #include <QTimer>
 #include <QSettings>
+#include <QVariant>
 #include <QtGlobal>
+
+namespace {
+// Picks black or white text so it stays legible against an arbitrary
+// user-chosen background color, using the standard ITU-R BT.601 perceptual
+// luminance approximation.
+QColor ContrastingForeground(const QColor &background)
+{
+  double luminance = (0.299 * background.red() +
+                       0.587 * background.green() +
+                       0.114 * background.blue()) / 255.0;
+  return luminance > 0.5 ? QColor(Qt::black) : QColor(Qt::white);
+}
+}  // namespace
 
 namespace swri_console
 {
@@ -64,8 +79,9 @@ LogDatabaseProxyModel::LogDatabaseProxyModel(LogDatabase *db)
   , use_regular_expressions_(false)
   , latest_log_index_(0)
   , earliest_log_index_(0)
-  , debug_color_(Qt::gray)
-  , info_color_(Qt::black)
+  , highlight_color_(QApplication::palette().color(QPalette::Highlight))
+  , debug_color_(QApplication::palette().color(QPalette::PlaceholderText))
+  , info_color_(QApplication::palette().color(QPalette::Text))
   , warn_color_(QColor(255,127,0))
   , error_color_(Qt::red)
   , fatal_color_(Qt::magenta)
@@ -238,6 +254,74 @@ void LogDatabaseProxyModel::setExcludeRegexpPattern(const QString& pattern)
   reset();
 }
 
+void LogDatabaseProxyModel::setExcludePreviewFilter(const QString& term)
+{
+  if (use_regular_expressions_) {
+    exclude_preview_regexp_.setPattern(term);
+    exclude_preview_term_.clear();
+  } else {
+    exclude_preview_term_ = term;
+    exclude_preview_regexp_.setPattern(QString());
+  }
+
+  repaintBackgrounds();
+}
+
+void LogDatabaseProxyModel::setOutputFormat(const QString& format)
+{
+  output_format_ = format;
+  parseOutputFormat();
+  QSettings settings;
+  settings.setValue(SettingsKeys::OUTPUT_FORMAT, format);
+
+  // Unlike most other display-only tweaks, a multi-line format can add or
+  // remove rows per log entry (header/footer lines), so msg_mapping_ has
+  // to be rebuilt rather than just repainted.
+  reset();
+}
+
+void LogDatabaseProxyModel::repaintBackgrounds()
+{
+  // Highlight (like the exclude preview) never changes which rows are
+  // accepted, so there's no need to rebuild msg_mapping_ via reset(); just
+  // repaint the affected rows.
+  if (rowCount(QModelIndex()) > 0) {
+    Q_EMIT dataChanged(index(0), index(rowCount(QModelIndex()) - 1), {Qt::BackgroundRole});
+  }
+}
+
+void LogDatabaseProxyModel::setHighlightFilters(const QStringList &list)
+{
+  highlight_strings_ = list;
+  // The text and regexp filters are always updated at the same time, so this
+  // value will be saved by setHighlightRegexpPattern.
+  repaintBackgrounds();
+}
+
+void LogDatabaseProxyModel::setHighlightRegexpPattern(const QString& pattern)
+{
+  highlight_regexp_.setPattern(pattern);
+  QSettings settings;
+  settings.setValue(SettingsKeys::HIGHLIGHT_FILTER, pattern);
+  repaintBackgrounds();
+}
+
+void LogDatabaseProxyModel::setHighlightColor(const QColor& highlight_color)
+{
+  highlight_color_ = highlight_color;
+  QSettings settings;
+  settings.setValue(SettingsKeys::HIGHLIGHT_COLOR, highlight_color);
+  repaintBackgrounds();
+}
+
+bool LogDatabaseProxyModel::isHighlightValid() const
+{
+  if (use_regular_expressions_ && !highlight_regexp_.isValid()) {
+    return false;
+  }
+  return true;
+}
+
 void LogDatabaseProxyModel::setDebugColor(const QColor& debug_color)
 {
   debug_color_ = debug_color;
@@ -278,6 +362,36 @@ void LogDatabaseProxyModel::setFatalColor(const QColor& fatal_color)
   reset();
 }
 
+void LogDatabaseProxyModel::setNodeColor(const std::string& node, const QColor& color)
+{
+  node_colors_[node] = color;
+
+  QVariantMap map;
+  for (const auto &kv : node_colors_) {
+    map.insert(QString::fromStdString(kv.first), kv.second);
+  }
+  QSettings settings;
+  settings.setValue(SettingsKeys::NODE_COLORS, map);
+
+  repaintBackgrounds();
+}
+
+void LogDatabaseProxyModel::clearNodeColor(const std::string& node)
+{
+  if (node_colors_.erase(node) == 0) {
+    return;
+  }
+
+  QVariantMap map;
+  for (const auto &kv : node_colors_) {
+    map.insert(QString::fromStdString(kv.first), kv.second);
+  }
+  QSettings settings;
+  settings.setValue(SettingsKeys::NODE_COLORS, map);
+
+  repaintBackgrounds();
+}
+
 int LogDatabaseProxyModel::rowCount(const QModelIndex &parent) const
 {
   if (parent.isValid()) {
@@ -299,6 +413,9 @@ bool LogDatabaseProxyModel::isIncludeValid() const
 bool LogDatabaseProxyModel::isExcludeValid() const
 {
   if (use_regular_expressions_ && !exclude_regexp_.isValid()) {
+    return false;
+  }
+  if (use_regular_expressions_ && !exclude_preview_regexp_.isValid()) {
     return false;
   }
   return true;
@@ -396,9 +513,17 @@ QVariant LogDatabaseProxyModel::data(
     case ExtendedLogRole:
       break;
     case Qt::ForegroundRole:
-      if (colorize_logs_) {
+      if (colorize_logs_ || !node_colors_.empty()) {
         break;
       }
+      return QVariant();
+    case Qt::BackgroundRole:
+      if (!exclude_preview_term_.isEmpty() || !exclude_preview_regexp_.pattern().isEmpty() ||
+          !highlight_strings_.isEmpty() || !highlight_regexp_.pattern().isEmpty() ||
+          !node_colors_.empty()) {
+        break;
+      }
+      return QVariant();
     default:
       return QVariant();
   }
@@ -412,6 +537,10 @@ QVariant LogDatabaseProxyModel::data(
   const LogEntry &item = db_->log()[line_idx.log_index];
 
   if (role == Qt::DisplayRole) {
+    if (!output_format_.isEmpty()) {
+      return QVariant(formatCustomLine(item, line_idx.line_index));
+    }
+
     char level = '?';
     if (item.getLogLvl() == rcl_interfaces::msg::Log::DEBUG) {
       level = 'D';
@@ -426,39 +555,7 @@ QVariant LogDatabaseProxyModel::data(
     }
 
     char stamp[128];
-    if (display_absolute_time_) {
-      if (human_readable_time_) {
-        char date_str[std::size("yyyy-mm-dd hh:mm:ss")];
-        const time_t time = static_cast<time_t>(item.stamp.seconds());
-        int32_t milliseconds = static_cast<int>(1000.0 * (item.stamp.seconds() - std::floor(item.stamp.seconds())));
-        std::strftime(std::data(date_str),
-          std::size(date_str),
-          "%F %T",
-          std::localtime(&time));
-        snprintf(stamp,
-          sizeof(stamp),
-          "%s:%03d",
-          date_str,
-          milliseconds);
-      } else {
-        snprintf(stamp,
-          sizeof(stamp),
-          "%f",
-          item.stamp.seconds());
-      }
-    } else {
-      rclcpp::Duration t = item.stamp - db_->minTime();
-
-      int32_t secs = t.seconds();
-      int hours = secs / 60 / 60;
-      int minutes = (secs / 60) % 60;
-      int seconds = (secs % 60);
-      int milliseconds = static_cast<int>(1000.0 * (t.seconds() - static_cast<double>(secs)));
-
-      snprintf(stamp, sizeof(stamp),
-               "%d:%02d:%02d:%03d",
-               hours, minutes, seconds, milliseconds);
-    }
+    formatTimestamp(item.stamp, stamp, sizeof(stamp));
 
     char id[256];
     if (display_logger_ && display_function_) {
@@ -495,7 +592,35 @@ QVariant LogDatabaseProxyModel::data(
 
     return QVariant(QString(header) + item.text[line_idx.line_index]);
   }
-  else if (role == Qt::ForegroundRole && colorize_logs_) {
+  else if (role == Qt::BackgroundRole) {
+    if (matchesExcludePreview(item)) {
+      return QVariant(QColor(255, 210, 130));
+    }
+    if (matchesHighlight(item)) {
+      return QVariant(highlight_color_);
+    }
+    auto node_color_it = node_colors_.find(item.node);
+    if (node_color_it != node_colors_.end()) {
+      return QVariant(node_color_it->second);
+    }
+    return QVariant();
+  }
+  else if (role == Qt::ForegroundRole) {
+    // A node color takes over the text color too (for contrast) unless the
+    // row's background is actually coming from the exclude-preview or
+    // highlight tint instead, in which case severity coloring behaves as
+    // usual.
+    if (!matchesExcludePreview(item) && !matchesHighlight(item)) {
+      auto node_color_it = node_colors_.find(item.node);
+      if (node_color_it != node_colors_.end()) {
+        return QVariant(ContrastingForeground(node_color_it->second));
+      }
+    }
+
+    if (!colorize_logs_) {
+      return QVariant();
+    }
+
     switch (item.getLogLvl()) {
       case rcl_interfaces::msg::Log::DEBUG:
         return QVariant(debug_color_);
@@ -647,7 +772,12 @@ void LogDatabaseProxyModel::saveBagFile(const QString& filename) const
 void LogDatabaseProxyModel::saveTextFile(const QString& filename) const
 {
   QFile outFile(filename);
-  outFile.open(QFile::WriteOnly);
+  if (!outFile.open(QFile::WriteOnly))
+  {
+    qWarning("Failed to open file '%s' for writing: %s",
+             qPrintable(filename), qPrintable(outFile.errorString()));
+    return;
+  }
   QTextStream outstream(&outFile);
   for(size_t i = 0; i < msg_mapping_.size(); i++)
   {
@@ -679,7 +809,8 @@ void LogDatabaseProxyModel::processNewMessages()
       continue;
     }
 
-    for (int i = 0; i < item.text.size(); i++) {
+    int line_count = entryLineCount(item);
+    for (int i = 0; i < line_count; i++) {
       new_items.emplace_back(latest_log_index_, i);
     }
   }
@@ -716,10 +847,11 @@ void LogDatabaseProxyModel::processOldMessages()
       continue;
     }
 
-    for (int i = 0; i < item.text.size(); i++) {
+    int line_count = entryLineCount(item);
+    for (int i = 0; i < line_count; i++) {
       // Note that we have to add the lines backwards to maintain the proper order.
       early_mapping_.push_front(
-        LineMap(earliest_log_index_-1, item.text.size()-1-i));
+        LineMap(earliest_log_index_-1, line_count-1-i));
     }
   }
 
@@ -769,7 +901,8 @@ bool LogDatabaseProxyModel::acceptLogEntry(const LogEntry &item)
     // across the new lines.
 
     // Don't let an empty regexp filter out everything
-    return exclude_regexp_.isEmpty() || exclude_regexp_.indexIn(item.text.join(" ")) < 0;
+    return exclude_regexp_.pattern().isEmpty() ||
+      !exclude_regexp_.match(item.text.join(" ")).hasMatch();
   } else {
     for (int i = 0; i < exclude_strings_.size(); i++) {
       if (item.text.join(" ").contains(exclude_strings_[i], Qt::CaseInsensitive)) {
@@ -781,13 +914,174 @@ bool LogDatabaseProxyModel::acceptLogEntry(const LogEntry &item)
   return true;
 }
 
+// Return true if the item matches the exclude term currently being typed
+// (but not yet committed).  Used to highlight rows instead of hiding them
+// while the user is still composing the term.
+bool LogDatabaseProxyModel::matchesExcludePreview(const LogEntry &item) const
+{
+  if (use_regular_expressions_) {
+    return !exclude_preview_regexp_.pattern().isEmpty() &&
+      exclude_preview_regexp_.match(item.text.join(" ")).hasMatch();
+  }
+
+  return !exclude_preview_term_.isEmpty() &&
+    item.text.join(" ").contains(exclude_preview_term_, Qt::CaseInsensitive);
+}
+
+// Return true if the item matches the (persistent) highlight filter.
+// Unlike the exclude preview, this never affects which rows are accepted --
+// it only decides whether the row gets tinted highlight_color_.
+bool LogDatabaseProxyModel::matchesHighlight(const LogEntry &item) const
+{
+  if (use_regular_expressions_) {
+    return !highlight_regexp_.pattern().isEmpty() &&
+      highlight_regexp_.match(item.text.join(" ")).hasMatch();
+  }
+
+  for (int i = 0; i < highlight_strings_.size(); i++) {
+    if (item.text.join(" ").contains(highlight_strings_[i], Qt::CaseInsensitive)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// Formats a timestamp the same way regardless of whether it's going into
+// the default fixed layout or a custom output_format_ line, so the two
+// stay in sync as display_absolute_time_/human_readable_time_ change.
+void LogDatabaseProxyModel::formatTimestamp(const rclcpp::Time &stamp, char *buf, size_t size) const
+{
+  if (display_absolute_time_) {
+    if (human_readable_time_) {
+      char date_str[std::size("yyyy-mm-dd hh:mm:ss")];
+      const time_t time = static_cast<time_t>(stamp.seconds());
+      int32_t milliseconds = static_cast<int>(1000.0 * (stamp.seconds() - std::floor(stamp.seconds())));
+      std::strftime(std::data(date_str),
+        std::size(date_str),
+        "%F %T",
+        std::localtime(&time));
+      snprintf(buf, size, "%s:%03d", date_str, milliseconds);
+    } else {
+      snprintf(buf, size, "%f", stamp.seconds());
+    }
+  } else {
+    rclcpp::Duration t = stamp - db_->minTime();
+
+    int32_t secs = t.seconds();
+    int hours = secs / 60 / 60;
+    int minutes = (secs / 60) % 60;
+    int seconds = (secs % 60);
+    int milliseconds = static_cast<int>(1000.0 * (t.seconds() - static_cast<double>(secs)));
+
+    snprintf(buf, size, "%d:%02d:%02d:%03d", hours, minutes, seconds, milliseconds);
+  }
+}
+
+// Renders a row using output_format_, substituting the same token names
+// used by ROS 2's RCUTILS_CONSOLE_OUTPUT_FORMAT environment variable so a
+// user's existing value can largely be pasted in as-is.
+// Splits output_format_ into the (possibly empty) header lines that come
+// before the line containing {message}, that line itself (repeated once
+// per physical line of the log message), and the (possibly empty) footer
+// lines after it.  Called whenever output_format_ changes so rendering
+// doesn't have to re-split the string on every row.
+void LogDatabaseProxyModel::parseOutputFormat()
+{
+  format_pre_lines_.clear();
+  format_message_line_.clear();
+  format_post_lines_.clear();
+
+  if (output_format_.isEmpty()) {
+    return;
+  }
+
+  QStringList lines = output_format_.split('\n');
+  int message_line_index = -1;
+  for (int i = 0; i < lines.size(); i++) {
+    if (lines[i].contains("{message}")) {
+      message_line_index = i;
+      break;
+    }
+  }
+
+  if (message_line_index == -1) {
+    // No {message} token anywhere in the format; treat the whole thing as
+    // a one-time header and append the raw message line(s) after it, so
+    // the message itself doesn't silently disappear from the view.
+    format_pre_lines_ = lines;
+    format_message_line_ = "{message}";
+    return;
+  }
+
+  for (int i = 0; i < message_line_index; i++) {
+    format_pre_lines_.append(lines[i]);
+  }
+  format_message_line_ = lines[message_line_index];
+  for (int i = message_line_index + 1; i < lines.size(); i++) {
+    format_post_lines_.append(lines[i]);
+  }
+}
+
+// Number of rows a single log entry expands to: unchanged (one row per
+// physical message line) when there's no custom format, or header lines +
+// one row per message line + footer lines when there is.
+int LogDatabaseProxyModel::entryLineCount(const LogEntry &item) const
+{
+  if (output_format_.isEmpty()) {
+    return item.text.size();
+  }
+  return format_pre_lines_.size() + item.text.size() + format_post_lines_.size();
+}
+
+QString LogDatabaseProxyModel::formatCustomLine(const LogEntry &item, int line_index) const
+{
+  if (line_index < format_pre_lines_.size()) {
+    return substituteTokens(format_pre_lines_[line_index], item, QString());
+  }
+  line_index -= format_pre_lines_.size();
+
+  if (line_index < item.text.size()) {
+    return substituteTokens(format_message_line_, item, item.text[line_index]);
+  }
+  line_index -= item.text.size();
+
+  return substituteTokens(format_post_lines_[line_index], item, QString());
+}
+
+QString LogDatabaseProxyModel::substituteTokens(
+  const QString &line_template, const LogEntry &item, const QString &message) const
+{
+  QString severity;
+  switch (item.getLogLvl()) {
+    case rcl_interfaces::msg::Log::DEBUG: severity = "DEBUG"; break;
+    case rcl_interfaces::msg::Log::INFO:  severity = "INFO";  break;
+    case rcl_interfaces::msg::Log::WARN:  severity = "WARN";  break;
+    case rcl_interfaces::msg::Log::ERROR: severity = "ERROR"; break;
+    case rcl_interfaces::msg::Log::FATAL: severity = "FATAL"; break;
+    default: severity = "?"; break;
+  }
+
+  char stamp[128];
+  formatTimestamp(item.stamp, stamp, sizeof(stamp));
+
+  QString line = line_template;
+  line.replace("{severity}", severity);
+  line.replace("{name}", QString::fromStdString(item.node));
+  line.replace("{function_name}", QString::fromStdString(item.function));
+  line.replace("{file_name}", QString::fromStdString(item.file));
+  line.replace("{line_number}", QString::number(item.line));
+  line.replace("{time}", stamp);
+  line.replace("{message}", message);
+  return line;
+}
+
 // Return true if the item message contains at least one of the
 // strings in include_filter_.  Always returns true if there are no
 // include strings.
 bool LogDatabaseProxyModel::testIncludeFilter(const LogEntry &item)
 {
   if (use_regular_expressions_) {
-    return include_regexp_.indexIn(item.text.join(" ")) >= 0;
+    return include_regexp_.match(item.text.join(" ")).hasMatch();
   } else {
     if (include_strings_.empty()) {
       return true;
